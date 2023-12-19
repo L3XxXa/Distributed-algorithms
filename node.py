@@ -45,7 +45,7 @@ class Node:
 
     def send(self, data):
         if self.is_connected():
-            print(f"Send {data} to {self.id}")
+            # print(f"Send {data} to {self.id}")
             self.sender.send(data)
 
     async def rcv(self):
