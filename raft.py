@@ -67,6 +67,7 @@ class Raft:
     def __init__(self, id: int, nodes, ts: TimeSource = TimeSource()):
         self.id = id
         self.nodes = nodes
+        self.dht = {}
         self.ts = ts
         self.nservers = len(nodes)+1
         self.min_votes = (self.nservers + 1)//2
@@ -84,7 +85,7 @@ class Raft:
             )
 
         assert(message.term == state.currentTerm)
-
+        
         matchIndex=0
         commitIndex=volatile_state.commitIndex
         success=False
@@ -168,6 +169,12 @@ class Raft:
 
         return None
 
+    def _on_set_value(self, key, value):
+        self.dht[key]=value
+    
+    def _on_get_value(self, key):
+        self.dht[key]
+
     def candidate(self, now: datetime, last: datetime, message, state: State, volatile_state: VolatileState) -> Result:
         if isinstance(message, Timeout):
             if (now - last > Timeout.Election):
@@ -239,7 +246,7 @@ class Raft:
                     )
         elif isinstance(message, CommandRequest):
             log=state.log
-            log.append(LogEntry(term=state.currentTerm,data=message.data))
+            log.append(LogEntry(term=state.currentTerm, operation_type=message.operation_type, key=message.key, value=message.value))
             return Result(
                 next_state=State(currentTerm=state.currentTerm, votedFor=state.votedFor, log=log),
                 next_volatile_state=volatile_state.with_commit_advance(self.nservers,len(log),state),

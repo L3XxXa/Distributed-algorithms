@@ -7,7 +7,10 @@ from typing import List
 @dataclass(frozen=True)
 class LogEntry:
     term: int = 1
-    data: bytes = None
+    operation_type: bytes = None
+    key: bytes = None
+    value: bytes = None
+
 
 @dataclass
 class RequestVoteRequest:
@@ -24,6 +27,24 @@ class RequestVoteResponse:
     dst: int
     term: int
     voteGranted: bool
+
+@dataclass
+class SetKeyToValueRequest:
+    key: bytes
+    value: bytes
+
+@dataclass
+class SetKeyToValueResponse:
+    pass
+
+@dataclass 
+class GetValueByKeyRequest:
+    key: bytes
+
+@dataclass
+class GetValueByKeyResponse:
+    value: bytes
+
 
 @dataclass
 class AppendEntriesRequest:
@@ -46,7 +67,9 @@ class AppendEntriesResponse:
 
 @dataclass
 class CommandRequest:
-    data: bytes
+    operation_type: bytes
+    key: bytes
+    value: bytes
 
 @dataclass
 class CommandResponse:

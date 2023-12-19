@@ -15,10 +15,14 @@ async def main():
         for line in sys.stdin:
             data=line.strip()
             print(f"Send {data}")
-            node.send(CommandRequest(data))
-            await node.drain()
-            await node.rcv()
-            print("Done")
+            separated = data.split(' ')
+            if(len(separated) == 3 and (separated[0] == 'get' or separated[0] == 'set')):
+                node.send(CommandRequest(operation_type=separated[0], key=separated[1], value=separated[2]))
+                await node.drain()
+                await node.rcv()
+                print("Done")
+            else:
+                print('Unexpected input')
     except Exception as ex:
         print(f"Exception: {ex}")
 
