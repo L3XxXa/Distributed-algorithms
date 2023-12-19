@@ -1,9 +1,10 @@
 import datetime
 from collections import defaultdict
 from dataclasses import dataclass,field
-from messages import LogEntry,Timeout,AppendEntriesRequest,AppendEntriesResponse,CommandRequest,CommandResponse,RequestVoteRequest,RequestVoteResponse,SetKeyToValueRequest,SetKeyToValueResponse,GetValueByKeyRequest,GetValueByKeyResponse
+from messages import LogEntry,Timeout,AppendEntriesRequest,AppendEntriesResponse,CommandRequest,CommandResponse,RequestVoteRequest,RequestVoteResponse,SetKeyToValueRequest,SetKeyToValueResponse,GetValueByKeyRequest,GetValueByKeyResponse,ErrorMessage
 from typing import List,Dict,Any
 from timesource import TimeSource
+from threading import Lock
 
 @dataclass(frozen=True,init=True)
 class State:
@@ -73,6 +74,7 @@ class Raft:
         self.min_votes = (self.nservers + 1)//2
         self.npeers = len(nodes)
         self.state = State()
+        self.lock = Lock()
         self.volatile_state = VolatileState()
         self.state_func = self.follower
         self.last_time = self.ts.now()
@@ -172,15 +174,20 @@ class Raft:
         return None
 
     def _on_set_value(self, key, value):
-        self.dht[key]=value
-        print(self.dht)
-        return SetKeyToValueResponse()
+        with self.lock:
+            self.dht[key]=value
+            print(self.dht)
+            return SetKeyToValueResponse()
     
     def _on_get_value(self, key):
-        value = self.dht[key]
-        if(value == None):
-            value = f'Not found value for key {key}'
-        return GetValueByKeyResponse(value)
+        with self.lock:
+            value = ''
+            if(key in self.dht):
+                value = self.dht[key]
+                return GetValueByKeyResponse(value)
+            else:
+                value = f'Not found item for {key}'
+                return ErrorMessage(f'Not found value for key {key}')
 
     def candidate(self, now: datetime, last: datetime, message, state: State, volatile_state: VolatileState) -> Result:
         if isinstance(message, Timeout):
@@ -314,6 +321,9 @@ class Raft:
                     if replyto:
                         replyto.send(result.message)
                 elif isinstance(result.message, GetValueByKeyResponse):
+                    if replyto:
+                        replyto.send(result.message)
+                elif isinstance(result.message, ErrorMessage):
                     if replyto:
                         replyto.send(result.message)
                 else:

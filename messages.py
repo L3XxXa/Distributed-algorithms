@@ -66,6 +66,10 @@ class AppendEntriesResponse:
     matchIndex: int
 
 @dataclass
+class ErrorMessage:
+    e: bytes
+
+@dataclass
 class CommandRequest:
     operation_type: bytes
     key: bytes
@@ -78,6 +82,7 @@ class CommandResponse:
 class Timeout:
     Election = timedelta(seconds = 5)
     Heartbeat = timedelta(seconds = 2)
+    LockTimeout = timedelta(seconds=1)
 
 def serialize(data):
     payload = pickle.dumps(data)
