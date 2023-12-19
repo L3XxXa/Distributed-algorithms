@@ -32,6 +32,6 @@ class Net:
             self.raft.process(Timeout())
             t1=datetime.now()
             if t1>t0+dt:
-                # print(f"State: {self.raft.state}")
+                print(f"State: {self.raft.state}")
                 t0=t1
             await asyncio.sleep(0.01)

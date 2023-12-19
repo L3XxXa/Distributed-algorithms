@@ -166,16 +166,20 @@ class Raft:
             return self.on_request_vote(message, state, volatile_state)
         elif isinstance(message, AppendEntriesRequest):
             return self.on_append_entries(message, state, volatile_state)
+        # elif isinstance(message, GetValueByKeyRequest):
+
 
         return None
 
     def _on_set_value(self, key, value):
-        print('asddasdadas')
         self.dht[key]=value
+        print(self.dht)
         return SetKeyToValueResponse()
     
     def _on_get_value(self, key):
         value = self.dht[key]
+        if(value == None):
+            value = f'Not found value for key {key}'
         return GetValueByKeyResponse(value)
 
     def candidate(self, now: datetime, last: datetime, message, state: State, volatile_state: VolatileState) -> Result:
@@ -257,17 +261,16 @@ class Raft:
             )
         elif isinstance(message, SetKeyToValueRequest):
             log = state.log
-            log.append(LogEntry(term=state.currentTerm, key=message.key, value=message.value))
+            log.append(LogEntry(term=state.currentTerm, operation_type='set', key=message.key, value=message.value))
             message_result = self._on_set_value(key=message.key, value = message.value)
             return Result(
                 next_state=State(currentTerm=state.currentTerm, votedFor=state.votedFor, log=log),
                 next_volatile_state=volatile_state.with_commit_advance(self.nservers,len(log),state),
                 message=message_result
-            )
-        
+            ) 
         elif isinstance(message, GetValueByKeyRequest):
             log = state.log
-            log.append(LogEntry(term=state.currentTerm, key=message.key, value=message.value))
+            log.append(LogEntry(term=state.currentTerm, operation_type='get', key=message.key, value=''))
             message_result = self._on_get_value(message.key)
             return Result(
                 next_state=State(currentTerm=state.currentTerm, votedFor=state.votedFor, log=log),
@@ -290,7 +293,7 @@ class Raft:
 
     def process(self, message, replyto=None):
         now = self.ts.now()
-        if not isinstance(message,Timeout) and not isinstance(message,CommandRequest) and not isinstance(message,SetKeyToValueRequest) and message.term > self.state.currentTerm:
+        if not isinstance(message,Timeout) and not isinstance(message,CommandRequest) and not isinstance(message,SetKeyToValueRequest) and not isinstance(message, GetValueByKeyRequest) and message.term > self.state.currentTerm:
             self.state=State(currentTerm=message.term, votedFor=0, log=self.state.log)
             self.state_func=self.follower
         self.apply_result(now, self.state_func(now, self.last_time, message, self.state, self.volatile_state), replyto)
@@ -307,10 +310,10 @@ class Raft:
                 if isinstance(result.message,CommandResponse):
                     if replyto:
                         replyto.send(result.message)
-                if isinstance(result.message, SetKeyToValueResponse):
+                elif isinstance(result.message, SetKeyToValueResponse):
                     if replyto:
                         replyto.send(result.message)
-                if isinstance(result.message, GetValueByKeyResponse):
+                elif isinstance(result.message, GetValueByKeyResponse):
                     if replyto:
                         replyto.send(result.message)
                 else:

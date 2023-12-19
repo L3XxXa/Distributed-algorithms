@@ -16,13 +16,12 @@ async def main():
             data=line.strip()
             separated = data.split(' ')
             if(len(separated) == 3 and  separated[0] == 'set'):
-                if(separated[0] == 'set'):                    
-                    node.send(SetKeyToValueRequest(key=separated[1], value=separated[2]))
-                    await node.drain()
-                    await node.rcv()
-                    print(f"Done")
+                node.send(SetKeyToValueRequest(key=separated[1], value=separated[2]))
+                await node.drain()
+                await node.rcv()
+                print(f"Done")
             elif(len(separated) == 2 and separated[0] == 'get'):
-                node.send(GetValueByKeyRequest(key=separated[0]))
+                node.send(GetValueByKeyRequest(key=separated[1]))
                 await node.drain()
                 res = await node.rcv()
                 print(f"Done with {res}")
