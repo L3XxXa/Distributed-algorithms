@@ -1,5 +1,6 @@
 import pickle
 import struct
+import random
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import List
@@ -80,7 +81,7 @@ class CommandResponse:
     pass
 
 class Timeout:
-    Election = timedelta(seconds = 5)
+    Election = timedelta(seconds = random.randint(3, 6))
     Heartbeat = timedelta(seconds = 2)
     LockTimeout = timedelta(seconds=1)
 

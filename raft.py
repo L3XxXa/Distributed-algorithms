@@ -126,10 +126,14 @@ class Raft:
                 accept=True
 
             return Result(
-                next_state=State(currentTerm=message.term, votedFor=message.candidateId),
+                next_state=State(currentTerm=message.term, votedFor=message.candidateId, log=state.log),
                 message=RequestVoteResponse(src=self.id, dst=message.src, term=message.term, voteGranted=accept)
             )
-
+        
+    def _reset_dht(self):
+        for i in range (0, len(self.state.log)):
+            if(self.state.log[i].operation_type == 'set'):
+                self.dht[self.state.log[i].key] = self.state.log[i].value
     def _create_vote(self, state):
         return RequestVoteRequest(
             src=self.id,
@@ -145,7 +149,6 @@ class Raft:
         lastIndex = min(prevIndex+1,len(state.log))
         if volatile_state.matchIndex[nodeId]+1 < volatile_state.nextIndex[nodeId]:
             lastIndex = prevIndex
-
         return AppendEntriesRequest(
             src=self.id,
             dst=nodeId,
@@ -193,7 +196,7 @@ class Raft:
         if isinstance(message, Timeout):
             if (now - last > Timeout.Election):
                 return Result(
-                    next_state=State(currentTerm=state.currentTerm+1,votedFor=self.id),
+                    next_state=State(currentTerm=state.currentTerm+1,votedFor=self.id, log=state.log),
                     next_volatile_state=VolatileState(),
                     update_last_time=True,
                     message=self._create_vote(state)
@@ -204,7 +207,7 @@ class Raft:
             votes = volatile_state.votes
             if message.term > state.currentTerm:
                 return Result(
-                    next_state=State(currentTerm=state.currentTerm,votedFor=state.votedFor),
+                    next_state=State(currentTerm=state.currentTerm,votedFor=state.votedFor, log=state.log),
                     next_state_func=self.follower,
                     update_last_time=True
                 )
@@ -220,8 +223,9 @@ class Raft:
                 print('===========')
                 value = len(state.log)+1
                 next_indices = {key: value for key in self.nodes.keys()}
+                self._reset_dht()
                 return Result(
-                    next_state=State(currentTerm=state.currentTerm,votedFor=state.votedFor),
+                    next_state=State(currentTerm=state.currentTerm,votedFor=state.votedFor, log=state.log),
                     next_volatile_state=VolatileState(
                         commitIndex=volatile_state.commitIndex,
                         lastApplied=volatile_state.lastApplied,
@@ -231,7 +235,7 @@ class Raft:
                     update_last_time=True
                 )
             return Result(
-                next_state=State(currentTerm=state.currentTerm,votedFor=state.votedFor),
+                next_state=State(currentTerm=state.currentTerm,votedFor=state.votedFor, log=state.log),
                 next_volatile_state=volatile_state.with_set_votes(votes),
             )
         elif isinstance(message, AppendEntriesRequest):
