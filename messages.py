@@ -47,6 +47,23 @@ class GetValueByKeyResponse:
     value: bytes
 
 
+@dataclass 
+class TwoPhaseCommitRequest:
+    src: int
+    dst: int
+    term: int
+    leaderId: int
+    prevLogIndex: int
+    prevLogTerm: int
+    leaderCommit: int
+    entries: List[LogEntry] = field(default_factory=list)
+
+@dataclass
+class TwoPhaseCommitResponse:
+    src: int
+    dst: int
+    can_append: bool
+
 @dataclass
 class AppendEntriesRequest:
     src: int

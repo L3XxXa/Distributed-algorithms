@@ -15,7 +15,7 @@ class Net:
         receiver = Receiver(reader)
         while True:
             obj = await receiver.rcv()
-            # print(f"Received: {obj}")
+            print(f"Received: {obj}")
             self.raft.process(obj, sender)
             await writer.drain()
 

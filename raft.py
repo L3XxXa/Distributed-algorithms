@@ -1,7 +1,7 @@
 import datetime
 from collections import defaultdict
 from dataclasses import dataclass,field
-from messages import LogEntry,Timeout,AppendEntriesRequest,AppendEntriesResponse,CommandRequest,CommandResponse,RequestVoteRequest,RequestVoteResponse,SetKeyToValueRequest,SetKeyToValueResponse,GetValueByKeyRequest,GetValueByKeyResponse,ErrorMessage
+from messages import *
 from typing import List,Dict,Any
 from timesource import TimeSource
 from threading import Lock
@@ -143,10 +143,28 @@ class Raft:
             lastLogIndex=len(state.log),
             lastLogTerm=0 if len(state.log)==0 else state.log[-1].term
         )
+    
+    def _create_requst_for_two_phase_commit(self, state, volatile_state, nodeId):
+        prevIndex = volatile_state.nextIndex[nodeId] - 1
+        lastIndex = min(prevIndex+1,len(state.log))
+        if volatile_state.matchIndex[nodeId]+1 < volatile_state.nextIndex[nodeId]:
+            lastIndex = prevIndex
+        return TwoPhaseCommitRequest(
+            src=self.id,
+            dst=nodeId,
+            term=state.currentTerm,
+            leaderId=self.id,
+            prevLogIndex=prevIndex,
+            prevLogTerm=state.log_term(prevIndex),
+            entries=state.log[prevIndex:lastIndex],
+            leaderCommit=min(volatile_state.commitIndex,lastIndex)
+        )
+
 
     def _create_append_entries(self, state, volatile_state, nodeId):
         prevIndex = volatile_state.nextIndex[nodeId] - 1
         lastIndex = min(prevIndex+1,len(state.log))
+        print(f'\n{nodeId} match index {volatile_state.matchIndex[nodeId]} {lastIndex} {prevIndex} {volatile_state.commitIndex}\n')
         if volatile_state.matchIndex[nodeId]+1 < volatile_state.nextIndex[nodeId]:
             lastIndex = prevIndex
         return AppendEntriesRequest(
@@ -163,10 +181,18 @@ class Raft:
     def follower(self, now: datetime, last: datetime, message, state: State, volatile_state: VolatileState) -> Result:
         if isinstance(message, Timeout):
             if (now - last > Timeout.Election):
+                print('=============\nElection timeout\n=============')
                 return Result(
                     next_state_func=self.candidate,
                     update_last_time=True
                 )
+        elif isinstance(message, TwoPhaseCommitRequest):
+            return Result(
+            message=TwoPhaseCommitResponse(src=self.id, dst=message.src, can_append=True),
+            next_volatile_state=volatile_state.with_commit_index(volatile_state.commitIndex),
+            next_state_func=self.follower,
+            update_last_time=True
+        )        
         elif isinstance(message, RequestVoteRequest):
             return self.on_request_vote(message, state, volatile_state)
         elif isinstance(message, AppendEntriesRequest):
@@ -174,7 +200,7 @@ class Raft:
         # elif isinstance(message, GetValueByKeyRequest):
 
 
-        return None
+        return None        
 
     def _on_set_value(self, key, value):
         with self.lock:
@@ -244,13 +270,21 @@ class Raft:
         return None
 
     def leader(self, now: datetime, last: datetime, message, state: State, volatile_state: VolatileState) -> Result:
+        # print(f'node {self.id} is leader')
         if isinstance(message, Timeout):
             if (now - last) > Timeout.Heartbeat:
                 return Result(
                     update_last_time=True,
-                    messages=[self._create_append_entries(state, volatile_state, nodeId) for nodeId in self.nodes.keys()]
+                    messages=[self._create_requst_for_two_phase_commit(state, volatile_state, nodeId) for nodeId in self.nodes.keys()]
+                )
+        elif(isinstance(message, TwoPhaseCommitResponse)):
+            print(f'response {message.can_append}')
+            return Result(
+                    update_last_time=True,
+                    messages=[self.on_append_entries(state, volatile_state, nodeId) for nodeId in self.nodes.keys()]
                 )
         elif isinstance(message, AppendEntriesResponse):
+            print('append entries')
             if message.term == state.currentTerm:
                 nodeId=message.src
                 if message.success:
@@ -304,7 +338,7 @@ class Raft:
 
     def process(self, message, replyto=None):
         now = self.ts.now()
-        if not isinstance(message,Timeout) and not isinstance(message,CommandRequest) and not isinstance(message,SetKeyToValueRequest) and not isinstance(message, GetValueByKeyRequest) and message.term > self.state.currentTerm:
+        if not isinstance(message,Timeout) and not isinstance(message,CommandRequest) and not isinstance(message,SetKeyToValueRequest) and not isinstance(message, GetValueByKeyRequest) and not isinstance(message, TwoPhaseCommitResponse) and message.term > self.state.currentTerm:
             self.state=State(currentTerm=message.term, votedFor=0, log=self.state.log)
             self.state_func=self.follower
         self.apply_result(now, self.state_func(now, self.last_time, message, self.state, self.volatile_state), replyto)
